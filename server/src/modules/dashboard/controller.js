@@ -6,9 +6,10 @@ export const dashboardController = {
   async getSummary(req, res, next) {
     try {
       // Total products in stock (distinct products with quantity > 0)
-      const stockQuantsWithQty = await StockQuant.find({ quantity: { $gt: 0 } }).lean();
-      const uniqueProductIds = [...new Set(stockQuantsWithQty.map(sq => sq.productId.toString()))];
-      const totalProductsInStock = uniqueProductIds.length;
+      // Handle ObjectId references explicitly
+      const stockQuantRecords = await StockQuant.find({ quantity: { $gt: 0 } }).lean();
+      const uniqueProductIds = new Set(stockQuantRecords.map(sq => sq.productId.toString()));
+      const totalProductsInStock = uniqueProductIds.size;
 
       // Low stock and out of stock items
       const productsWithStock = await Product.find({ isActive: true })
