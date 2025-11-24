@@ -117,24 +117,14 @@ export const documentsAPI = {
     return extractData(response, USE_MOCK);
   },
 
-  validate: async (id) => {
+  updateStatus: async (id, status) => {
     if (USE_MOCK) {
-      const result = await mockApi.documents.validate(id);
+      const result = await mockApi.documents.updateStatus(id, status);
       return result.data;
     }
-    const response = await api.post(`${API_ENDPOINTS.DOCUMENTS}/${id}/validate`);
+    const response = await api.put(`${API_ENDPOINTS.DOCUMENTS}/${id}/status`, { status });
     const responseData = extractData(response, USE_MOCK);
     return toCamelCase(responseData.document || responseData);
-  },
-
-  cancel: async (id) => {
-    if (USE_MOCK) {
-      const result = await mockApi.documents.cancel(id);
-      return result.data;
-    }
-    // Backend doesn't have cancel endpoint, but keep for mock compatibility
-    const response = await api.post(`${API_ENDPOINTS.DOCUMENTS}/${id}/cancel`);
-    return extractData(response, USE_MOCK);
   },
 };
 

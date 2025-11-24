@@ -25,6 +25,12 @@ const updateCategorySchema = z.object({
   })
 });
 
+const deleteCategorySchema = z.object({
+  params: z.object({
+    id: z.string()
+  })
+});
+
 // GET /categories
 router.get('/', authenticate, async (req, res, next) => {
   try {
@@ -204,6 +210,48 @@ router.patch('/:id', validate(updateCategorySchema), authenticate, authorize('IN
         message: 'Category with this name already exists'
       });
     }
+    next(error);
+  }
+});
+
+// DELETE /categories/:id
+router.delete('/:id', validate(deleteCategorySchema), authenticate, authorize('INVENTORY_MANAGER'), async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid category ID'
+      });
+    }
+
+    const category = await Category.findById(id);
+
+    if (!category) {
+      return res.status(404).json({
+        success: false,
+        message: 'Category not found'
+      });
+    }
+
+    // Check if category has products
+    const productCount = await Product.countDocuments({ categoryId: id });
+
+    if (productCount > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot delete category with ${productCount} product(s). Please reassign or delete the products first.`
+      });
+    }
+
+    await Category.findByIdAndDelete(id);
+
+    res.json({
+      success: true,
+      message: 'Category deleted successfully'
+    });
+  } catch (error) {
     next(error);
   }
 });

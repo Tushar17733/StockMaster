@@ -58,10 +58,11 @@ export const productsAPI = {
       categoryId: data.categoryId || data.category_id,
       unitOfMeasure: data.unitOfMeasure || data.unit || data.unit_of_measure,
       isActive: data.isActive !== undefined ? data.isActive : (data.is_active !== undefined ? data.is_active : true),
-      initialStock: data.initialStock || data.initial_stock || 0,
+      initialStock: data.stock || data.initialStock || data.initial_stock || 0,
       initialLocationId: data.initialLocationId || data.initial_location_id,
       price: data.price,
       description: data.description,
+      stock: data.stock || 0
     });
     
     const response = await api.post(API_ENDPOINTS.PRODUCTS, requestData);
@@ -81,6 +82,8 @@ export const productsAPI = {
       categoryId: data.categoryId || data.category_id,
       unitOfMeasure: data.unitOfMeasure || data.unit || data.unit_of_measure,
       isActive: data.isActive !== undefined ? data.isActive : data.is_active,
+      price: data.price,
+      description: data.description
     });
     
     const response = await api.patch(`${API_ENDPOINTS.PRODUCTS}/${id}`, requestData);

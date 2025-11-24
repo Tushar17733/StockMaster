@@ -3,11 +3,13 @@ import { Link } from 'react-router-dom';
 import { useApi } from '../../hooks/useApi';
 import { documentsAPI } from '../../api/documents';
 import { useAuth } from '../../contexts/AuthContext';
+import { getUserFriendlyError } from '../../utils/errorHandler';
 import { Table, TableHeader, TableHeaderCell, TableBody, TableRow, TableCell } from '../../components/UI/Table';
 import { Button } from '../../components/UI/Button';
 import { Loader } from '../../components/UI/Loader';
 import { Alert } from '../../components/UI/Alert';
 import { Pagination } from '../../components/UI/Pagination';
+import { ConfirmModal } from '../../components/UI/ConfirmModal';
 import { Input } from '../../components/UI/Input';
 import { Select } from '../../components/UI/Select';
 import { formatDate } from '../../utils/helpers';
@@ -17,9 +19,11 @@ export const DocumentsList = () => {
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState('');
   const [docTypeFilter, setDocTypeFilter] = useState('');
+  const [deleteModal, setDeleteModal] = useState({ isOpen: false, documentId: null });
+  const [deleteError, setDeleteError] = useState(null);
   const itemsPerPage = 10;
 
-  const { data, loading, error } = useApi(
+  const { data, loading, error, execute } = useApi(
     () => documentsAPI.getAll({ 
       page, 
       limit: itemsPerPage,
@@ -29,6 +33,20 @@ export const DocumentsList = () => {
     true,
     [page, statusFilter, docTypeFilter]
   );
+
+  const handleDelete = async () => {
+    if (deleteModal.documentId) {
+      setDeleteError(null);
+      try {
+        await documentsAPI.delete(deleteModal.documentId);
+        setDeleteModal({ isOpen: false, documentId: null });
+        execute(); // Refresh list
+      } catch (err) {
+        const errorMessage = getUserFriendlyError(err);
+        setDeleteError(errorMessage);
+      }
+    }
+  };
 
   if (loading && !data) return <Loader size="lg" />;
   if (error) return <Alert type="error" message={error} />;
@@ -130,11 +148,22 @@ export const DocumentsList = () => {
                   </TableCell>
                   <TableCell>{formatDate(document.date || document.createdAt)}</TableCell>
                   <TableCell>
-                    <Link to={`/documents/${document.id}`}>
-                      <Button variant="secondary" className="text-xs py-1 px-2">
-                        View
-                      </Button>
-                    </Link>
+                    <div className="flex space-x-2">
+                      <Link to={`/documents/${document.id}`}>
+                        <Button variant="secondary" className="text-xs py-1 px-2">
+                          View
+                        </Button>
+                      </Link>
+                      {isInventoryManager() && (
+                        <Button
+                          variant="danger"
+                          className="text-xs py-1 px-2"
+                          onClick={() => setDeleteModal({ isOpen: true, documentId: document.id })}
+                        >
+                          Delete
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
@@ -152,6 +181,22 @@ export const DocumentsList = () => {
           />
         )}
       </div>
+
+      <ConfirmModal
+        isOpen={deleteModal.isOpen}
+        onClose={() => {
+          setDeleteModal({ isOpen: false, documentId: null });
+          setDeleteError(null);
+        }}
+        onConfirm={handleDelete}
+        title="Delete Document"
+        message={
+          deleteError 
+            ? <Alert type="error" message={deleteError} />
+            : "Are you sure you want to delete this cancelled document? This action cannot be undone."
+        }
+        variant="danger"
+      />
     </div>
   );
 };

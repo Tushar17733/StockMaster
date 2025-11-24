@@ -79,13 +79,13 @@ export const DocumentForm = () => {
       const documentData = {
         docType: data.docType,
         status: data.status || 'DRAFT',
-        fromLocationId: data.fromLocationId ? parseInt(data.fromLocationId) : undefined,
-        toLocationId: data.toLocationId ? parseInt(data.toLocationId) : undefined,
+        fromLocationId: data.fromLocationId || undefined,
+        toLocationId: data.toLocationId || undefined,
         supplierName: data.supplierName,
         customerName: data.customerName,
         scheduledDate: data.scheduledDate,
         lines: data.lines.map(line => ({
-          productId: parseInt(line.productId),
+          productId: line.productId,
           quantity: parseFloat(line.quantity),
         })),
       };

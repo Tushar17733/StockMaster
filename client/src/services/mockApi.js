@@ -523,7 +523,7 @@ export const mockApi = {
       return { data: { message: 'Document deleted' } };
     },
 
-    validate: async (id) => {
+    updateStatus: async (id, status) => {
       const documents = getFromStorage('documents', []);
       const index = documents.findIndex((d) => d.id === id);
 
@@ -531,21 +531,15 @@ export const mockApi = {
         throw { response: { status: 404, data: { message: 'Document not found' } } };
       }
 
-      documents[index].status = 'validated';
-      saveToStorage('documents', documents);
-
-      return { data: documents[index] };
-    },
-
-    cancel: async (id) => {
-      const documents = getFromStorage('documents', []);
-      const index = documents.findIndex((d) => d.id === id);
-
-      if (index === -1) {
-        throw { response: { status: 404, data: { message: 'Document not found' } } };
+      // Handle special statuses
+      if (status === 'DONE') {
+        documents[index].status = 'validated';
+      } else if (status === 'CANCELED') {
+        documents[index].status = 'cancelled';
+      } else {
+        documents[index].status = status.toLowerCase();
       }
-
-      documents[index].status = 'cancelled';
+      
       saveToStorage('documents', documents);
 
       return { data: documents[index] };

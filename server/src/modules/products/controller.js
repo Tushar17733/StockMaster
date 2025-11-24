@@ -85,6 +85,8 @@ export const productsController = {
           categoryId: product.categoryId?._id || product.categoryId,
           category: product.categoryId ? { id: product.categoryId._id || product.categoryId.id, name: product.categoryId.name } : null,
           unitOfMeasure: product.unitOfMeasure,
+          price: product.price || 0,
+          description: product.description || '',
           isActive: product.isActive,
           createdAt: product.createdAt,
           updatedAt: product.updatedAt,
@@ -131,11 +133,23 @@ export const productsController = {
         unit_of_measure, 
         is_active = true,
         initial_stock = 0,
-        initial_location_id 
+        initial_location_id,
+        price,
+        description,
+        stock
       } = req.body;
 
+      // Convert string numbers to actual numbers
+      const priceNum = price ? (typeof price === 'string' ? parseFloat(price) : price) : 0;
+      const stockNum = stock !== undefined ? (typeof stock === 'string' ? parseInt(stock) : stock) : initial_stock;
+      const initialStockNum = typeof initial_stock === 'string' ? parseInt(initial_stock) : initial_stock;
+      const finalStock = stockNum || initialStockNum || 0;
+
+      // Generate SKU if not provided
+      const productSku = sku && sku.trim() ? sku.toUpperCase() : `SKU-${Date.now()}`;
+
       // Check if SKU already exists
-      const existingProduct = await Product.findOne({ sku: sku.toUpperCase() });
+      const existingProduct = await Product.findOne({ sku: productSku });
 
       if (existingProduct) {
         return res.status(409).json({
@@ -147,7 +161,7 @@ export const productsController = {
       let product;
 
       // If initial stock is provided, create product with initial stock adjustment
-      if (initial_stock > 0 && initial_location_id) {
+      if (finalStock > 0 && initial_location_id) {
         // Verify location exists
         const location = await Location.findById(initial_location_id);
 
@@ -166,10 +180,12 @@ export const productsController = {
           // Create product
           const newProduct = await Product.create([{
             name,
-            sku: sku.toUpperCase(),
-            categoryId: category_id,
-            unitOfMeasure: unit_of_measure,
-            isActive: is_active
+            sku: productSku,
+            categoryId: category_id || null,
+            unitOfMeasure: unit_of_measure || 'pcs',
+            isActive: is_active,
+            price: priceNum,
+            description: description || ''
           }], { session });
 
           const createdProduct = newProduct[0];
@@ -178,7 +194,7 @@ export const productsController = {
           await StockQuant.create([{
             productId: createdProduct._id,
             locationId: initial_location_id,
-            quantity: initial_stock
+            quantity: finalStock
           }], { session });
 
           // Create adjustment document for audit trail
@@ -199,7 +215,7 @@ export const productsController = {
             productId: createdProduct._id,
             fromLocationId: null,
             toLocationId: initial_location_id,
-            quantity: initial_stock
+            quantity: finalStock
           }], { session });
 
           await session.commitTransaction();
@@ -212,18 +228,24 @@ export const productsController = {
         }
 
         // Populate category
-        await product.populate('categoryId', 'id name');
+        if (product.categoryId) {
+          await product.populate('categoryId', 'id name');
+        }
       } else {
         // Create product without initial stock
         product = await Product.create({
           name,
-          sku: sku.toUpperCase(),
-          categoryId: category_id,
-          unitOfMeasure: unit_of_measure,
-          isActive: is_active
+          sku: productSku,
+          categoryId: category_id || null,
+          unitOfMeasure: unit_of_measure || 'pcs',
+          isActive: is_active,
+          price: priceNum,
+          description: description || ''
         });
 
-        await product.populate('categoryId', 'id name');
+        if (product.categoryId) {
+          await product.populate('categoryId', 'id name');
+        }
       }
 
       const productResponse = {
@@ -234,6 +256,8 @@ export const productsController = {
         category: product.categoryId ? { id: product.categoryId._id || product.categoryId.id, name: product.categoryId.name } : null,
         unitOfMeasure: product.unitOfMeasure,
         isActive: product.isActive,
+        price: product.price,
+        description: product.description,
         createdAt: product.createdAt,
         updatedAt: product.updatedAt
       };
@@ -297,6 +321,8 @@ export const productsController = {
         categoryId: product.categoryId?._id || product.categoryId,
         category: product.categoryId ? { id: product.categoryId._id || product.categoryId.id, name: product.categoryId.name } : null,
         unitOfMeasure: product.unitOfMeasure,
+        price: product.price || 0,
+        description: product.description || '',
         isActive: product.isActive,
         createdAt: product.createdAt,
         updatedAt: product.updatedAt,
@@ -336,7 +362,7 @@ export const productsController = {
   async updateProduct(req, res, next) {
     try {
       const { id } = req.params;
-      const { name, category_id, unit_of_measure, is_active } = req.body;
+      const { name, category_id, unit_of_measure, is_active, price, description } = req.body;
 
       if (!mongoose.Types.ObjectId.isValid(id)) {
         return res.status(400).json({
@@ -359,6 +385,8 @@ export const productsController = {
       if (category_id !== undefined) updateData.categoryId = category_id;
       if (unit_of_measure !== undefined) updateData.unitOfMeasure = unit_of_measure;
       if (is_active !== undefined) updateData.isActive = is_active;
+      if (price !== undefined) updateData.price = typeof price === 'string' ? parseFloat(price) : price;
+      if (description !== undefined) updateData.description = description;
 
       const updatedProduct = await Product.findByIdAndUpdate(
         id,
@@ -374,6 +402,8 @@ export const productsController = {
         category: updatedProduct.categoryId ? { id: updatedProduct.categoryId._id || updatedProduct.categoryId.id, name: updatedProduct.categoryId.name } : null,
         unitOfMeasure: updatedProduct.unitOfMeasure,
         isActive: updatedProduct.isActive,
+        price: updatedProduct.price,
+        description: updatedProduct.description,
         createdAt: updatedProduct.createdAt,
         updatedAt: updatedProduct.updatedAt
       };
@@ -427,6 +457,79 @@ export const productsController = {
           }))
         }
       });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async deleteProduct(req, res, next) {
+    try {
+      const { id } = req.params;
+
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid product ID'
+        });
+      }
+
+      const product = await Product.findById(id);
+
+      if (!product) {
+        return res.status(404).json({
+          success: false,
+          message: 'Product not found'
+        });
+      }
+
+      // Check if product has stock
+      const stockQuants = await StockQuant.find({ productId: id });
+      const totalStock = stockQuants.reduce((sum, quant) => sum + quant.quantity, 0);
+
+      if (totalStock > 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot delete product with existing stock. Please remove all stock first.'
+        });
+      }
+
+      // Check if product is used in any documents
+      const documentCount = await StockMove.countDocuments({ productId: id });
+
+      if (documentCount > 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot delete product that has been used in stock movements. Consider marking it as inactive instead.'
+        });
+      }
+
+      // Delete related data
+      const session = await mongoose.startSession();
+      session.startTransaction();
+
+      try {
+        // Delete reorder rules
+        const { ReorderRule } = await import('../../models/index.js');
+        await ReorderRule.deleteMany({ productId: id }, { session });
+
+        // Delete stock quants (should be empty at this point)
+        await StockQuant.deleteMany({ productId: id }, { session });
+
+        // Delete product
+        await Product.findByIdAndDelete(id, { session });
+
+        await session.commitTransaction();
+
+        res.json({
+          success: true,
+          message: 'Product deleted successfully'
+        });
+      } catch (error) {
+        await session.abortTransaction();
+        throw error;
+      } finally {
+        session.endSession();
+      }
     } catch (error) {
       next(error);
     }

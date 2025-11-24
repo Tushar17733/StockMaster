@@ -26,6 +26,12 @@ const updateLocationSchema = z.object({
   })
 });
 
+const deleteLocationSchema = z.object({
+  params: z.object({
+    id: z.string()
+  })
+});
+
 const getLocationsSchema = z.object({
   query: z.object({
     warehouse_id: z.string().optional(),
@@ -286,6 +292,69 @@ router.patch('/:id', validate(updateLocationSchema), authenticate, authorize('IN
         message: 'Location with this name already exists in this warehouse'
       });
     }
+    next(error);
+  }
+});
+
+// DELETE /locations/:id
+router.delete('/:id', validate(deleteLocationSchema), authenticate, authorize('INVENTORY_MANAGER'), async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid location ID'
+      });
+    }
+
+    const location = await Location.findById(id);
+
+    if (!location) {
+      return res.status(404).json({
+        success: false,
+        message: 'Location not found'
+      });
+    }
+
+    // Check if location has stock
+    const stockQuants = await StockQuant.find({ locationId: id });
+    const totalStock = stockQuants.reduce((sum, sq) => sum + sq.quantity, 0);
+
+    if (totalStock > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot delete location with ${totalStock} items in stock. Please move the stock first.`
+      });
+    }
+
+    // Check if location is used in documents
+    const { Document, StockMove } = await import('../../models/index.js');
+    const documentCount = await Document.countDocuments({
+      $or: [
+        { fromLocationId: id },
+        { toLocationId: id }
+      ]
+    });
+
+    if (documentCount > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot delete location that has been used in documents. Consider marking it as inactive instead.'
+      });
+    }
+
+    // Delete empty stock quants
+    await StockQuant.deleteMany({ locationId: id });
+
+    // Delete location
+    await Location.findByIdAndDelete(id);
+
+    res.json({
+      success: true,
+      message: 'Location deleted successfully'
+    });
+  } catch (error) {
     next(error);
   }
 });

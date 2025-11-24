@@ -6,7 +6,8 @@ import { authenticate, authorize } from '../../middleware/auth.js';
 import {
   createProductSchema,
   updateProductSchema,
-  getProductsSchema
+  getProductsSchema,
+  deleteProductSchema
 } from './validation.js';
 
 const router = Router();
@@ -16,5 +17,6 @@ router.post('/', validate(createProductSchema), authenticate, authorize('INVENTO
 router.get('/:id', authenticate, productsController.getProduct);
 router.patch('/:id', validate(updateProductSchema), authenticate, authorize('INVENTORY_MANAGER'), productsController.updateProduct);
 router.get('/:id/stock', authenticate, productsController.getProductStock);
+router.delete('/:id', validate(deleteProductSchema), authenticate, authorize('INVENTORY_MANAGER'), productsController.deleteProduct);
 
 export default router;

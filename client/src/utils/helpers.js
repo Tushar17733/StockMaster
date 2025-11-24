@@ -22,9 +22,9 @@ export const formatDateTime = (dateString) => {
 
 export const formatCurrency = (amount) => {
   if (amount === null || amount === undefined) return '-';
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat('en-IN', {
     style: 'currency',
-    currency: 'USD',
+    currency: 'INR',
   }).format(amount);
 };
 

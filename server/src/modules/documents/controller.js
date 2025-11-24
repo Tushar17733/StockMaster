@@ -212,6 +212,7 @@ export const documentsController = {
       const session = await mongoose.startSession();
       session.startTransaction();
 
+      let createdDocId;
       try {
         // Create document
         const newDoc = await Document.create([{
@@ -226,6 +227,8 @@ export const documentsController = {
           createdById: req.user.id
         }], { session });
 
+        createdDocId = newDoc[0]._id;
+
         // Create stock moves
         const stockMovesData = lines.map(line => ({
           documentId: newDoc[0]._id,
@@ -238,66 +241,66 @@ export const documentsController = {
         await StockMove.insertMany(stockMovesData, { session });
 
         await session.commitTransaction();
-
-        // Fetch complete document with relations
-        const completeDocument = await Document.findById(newDoc[0]._id)
-          .populate({
-            path: 'fromLocationId',
-            populate: {
-              path: 'warehouseId',
-              select: 'id name code'
-            }
-          })
-          .populate({
-            path: 'toLocationId',
-            populate: {
-              path: 'warehouseId',
-              select: 'id name code'
-            }
-          })
-          .populate('createdById', 'id name email')
-          .populate({
-            path: 'stockMoves',
-            populate: {
-              path: 'productId',
-              select: 'id name sku'
-            }
-          })
-          .lean();
-
-        const stockMoves = await StockMove.find({ documentId: newDoc[0]._id })
-          .populate('productId', 'id name sku')
-          .lean();
-
-        const docResponse = {
-          ...completeDocument,
-          id: completeDocument._id,
-          stockMoves: stockMoves.map(move => ({
-            id: move._id,
-            documentId: move.documentId,
-            productId: move.productId?._id || move.productId,
-            product: move.productId ? {
-              id: move.productId._id || move.productId.id,
-              name: move.productId.name,
-              sku: move.productId.sku
-            } : null,
-            fromLocationId: move.fromLocationId,
-            toLocationId: move.toLocationId,
-            quantity: move.quantity
-          }))
-        };
-
-        res.status(201).json({
-          success: true,
-          message: 'Document created successfully',
-          data: { document: docResponse }
-        });
+        session.endSession();
       } catch (error) {
         await session.abortTransaction();
-        throw error;
-      } finally {
         session.endSession();
+        throw error;
       }
+
+      // Fetch complete document with relations (outside transaction)
+      const completeDocument = await Document.findById(createdDocId)
+        .populate({
+          path: 'fromLocationId',
+          populate: {
+            path: 'warehouseId',
+            select: 'id name code'
+          }
+        })
+        .populate({
+          path: 'toLocationId',
+          populate: {
+            path: 'warehouseId',
+            select: 'id name code'
+          }
+        })
+        .populate('createdById', 'id name email')
+        .populate({
+          path: 'stockMoves',
+          populate: {
+            path: 'productId',
+            select: 'id name sku'
+          }
+        })
+        .lean();
+
+      const stockMoves = await StockMove.find({ documentId: createdDocId })
+        .populate('productId', 'id name sku')
+        .lean();
+
+      const docResponse = {
+        ...completeDocument,
+        id: completeDocument._id,
+        stockMoves: stockMoves.map(move => ({
+          id: move._id,
+          documentId: move.documentId,
+          productId: move.productId?._id || move.productId,
+          product: move.productId ? {
+            id: move.productId._id || move.productId.id,
+            name: move.productId.name,
+            sku: move.productId.sku
+          } : null,
+          fromLocationId: move.fromLocationId,
+          toLocationId: move.toLocationId,
+          quantity: move.quantity
+        }))
+      };
+
+      res.status(201).json({
+        success: true,
+        message: 'Document created successfully',
+        data: { document: docResponse }
+      });
     } catch (error) {
       next(error);
     }
@@ -453,14 +456,14 @@ export const documentsController = {
         for (const move of stockMoves) {
           if (document.docType === 'RECEIPT') {
             // Increase stock at to_location
-            await this.updateStockQuant(session, move.productId, move.toLocationId, move.quantity, 'INCREASE');
+            await documentsController.updateStockQuant(session, move.productId, move.toLocationId, move.quantity, 'INCREASE');
           } else if (document.docType === 'DELIVERY') {
             // Decrease stock at from_location
-            await this.updateStockQuant(session, move.productId, move.fromLocationId, move.quantity, 'DECREASE');
+            await documentsController.updateStockQuant(session, move.productId, move.fromLocationId, move.quantity, 'DECREASE');
           } else if (document.docType === 'INTERNAL_TRANSFER') {
             // Decrease from source, increase at destination
-            await this.updateStockQuant(session, move.productId, move.fromLocationId, move.quantity, 'DECREASE');
-            await this.updateStockQuant(session, move.productId, move.toLocationId, move.quantity, 'INCREASE');
+            await documentsController.updateStockQuant(session, move.productId, move.fromLocationId, move.quantity, 'DECREASE');
+            await documentsController.updateStockQuant(session, move.productId, move.toLocationId, move.quantity, 'INCREASE');
           } else if (document.docType === 'ADJUSTMENT') {
             // For adjustment, we need to calculate the difference
             const currentQuant = await StockQuant.findOne({
@@ -472,9 +475,9 @@ export const documentsController = {
             const difference = move.quantity - currentQty;
 
             if (difference > 0) {
-              await this.updateStockQuant(session, move.productId, move.toLocationId, difference, 'INCREASE');
+              await documentsController.updateStockQuant(session, move.productId, move.toLocationId, difference, 'INCREASE');
             } else if (difference < 0) {
-              await this.updateStockQuant(session, move.productId, move.toLocationId, Math.abs(difference), 'DECREASE');
+              await documentsController.updateStockQuant(session, move.productId, move.toLocationId, Math.abs(difference), 'DECREASE');
             }
           }
         }
@@ -493,11 +496,11 @@ export const documentsController = {
         );
 
         await session.commitTransaction();
+        session.endSession();
       } catch (error) {
         await session.abortTransaction();
-        throw error;
-      } finally {
         session.endSession();
+        throw error;
       }
 
       // Fetch updated document
@@ -647,6 +650,111 @@ export const documentsController = {
     }
   },
 
+  async updateDocumentStatus(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid document ID'
+        });
+      }
+
+      const document = await Document.findById(id).lean();
+
+      if (!document) {
+        return res.status(404).json({
+          success: false,
+          message: 'Document not found'
+        });
+      }
+
+      // Prevent changing status of validated documents
+      if (document.status === 'DONE' && status !== 'CANCELED') {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot change status of validated documents'
+        });
+      }
+
+      // Prevent changing status of canceled documents back to active statuses
+      if (document.status === 'CANCELED' && status !== 'DONE') {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot change status of canceled documents'
+        });
+      }
+
+      // Handle validation logic
+      if (status === 'DONE') {
+        // Validate document and update stock
+        return await documentsController.validateDocumentLogic(req, res, next, id);
+      }
+
+      // Handle cancellation logic
+      if (status === 'CANCELED') {
+        // Cancel document
+        return await documentsController.cancelDocumentLogic(req, res, next, id);
+      }
+
+      // For other status changes, just update the status
+      const updatedDocument = await Document.findByIdAndUpdate(
+        id,
+        { $set: { status } },
+        { new: true }
+      )
+        .populate({
+          path: 'fromLocationId',
+          populate: {
+            path: 'warehouseId',
+            select: 'id name code'
+          }
+        })
+        .populate({
+          path: 'toLocationId',
+          populate: {
+            path: 'warehouseId',
+            select: 'id name code'
+          }
+        })
+        .populate('createdById', 'id name email')
+        .populate('validatedById', 'id name email')
+        .lean();
+
+      const stockMoves = await StockMove.find({ documentId: id })
+        .populate('productId', 'id name sku')
+        .lean();
+
+      const docResponse = {
+        ...updatedDocument,
+        id: updatedDocument._id,
+        stockMoves: stockMoves.map(move => ({
+          id: move._id,
+          documentId: move.documentId,
+          productId: move.productId?._id || move.productId,
+          product: move.productId ? {
+            id: move.productId._id || move.productId.id,
+            name: move.productId.name,
+            sku: move.productId.sku
+          } : null,
+          fromLocationId: move.fromLocationId,
+          toLocationId: move.toLocationId,
+          quantity: move.quantity
+        }))
+      };
+
+      res.json({
+        success: true,
+        message: `Document status updated to ${status}`,
+        data: { document: docResponse }
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
   async updateStockQuant(session, productId, locationId, quantity, operation) {
     const existingQuant = await StockQuant.findOne({
       productId,
@@ -778,6 +886,7 @@ export const documentsController = {
         }
 
         await session.commitTransaction();
+        session.endSession();
 
         const document = await Document.findById(adjustmentDoc[0]._id).lean();
 
@@ -788,12 +897,294 @@ export const documentsController = {
         });
       } catch (error) {
         await session.abortTransaction();
-        throw error;
-      } finally {
         session.endSession();
+        throw error;
       }
     } catch (error) {
       next(error);
     }
-  }
+  },
+
+  async deleteDocument(req, res, next) {
+    try {
+      const { id } = req.params;
+
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid document ID'
+        });
+      }
+
+      const document = await Document.findById(id).lean();
+
+      if (!document) {
+        return res.status(404).json({
+          success: false,
+          message: 'Document not found'
+        });
+      }
+
+      // Prevent deletion of validated documents
+      if (document.status === 'DONE') {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot delete validated documents. Stock has already been updated.'
+        });
+      }
+
+      // Delete stock moves first
+      await StockMove.deleteMany({ documentId: id });
+
+      // Delete document
+      await Document.findByIdAndDelete(id);
+
+      res.json({
+        success: true,
+        message: 'Document deleted successfully'
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async validateDocumentLogic(req, res, next, documentId) {
+    try {
+      const id = documentId;
+
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid document ID'
+        });
+      }
+
+      const document = await Document.findById(id).lean();
+
+      if (!document) {
+        return res.status(404).json({
+          success: false,
+          message: 'Document not found'
+        });
+      }
+
+      if (document.status === 'DONE') {
+        return res.status(400).json({
+          success: false,
+          message: 'Document is already validated'
+        });
+      }
+
+      if (document.status === 'CANCELED') {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot validate a canceled document'
+        });
+      }
+
+      // Get stock moves
+      const stockMoves = await StockMove.find({ documentId: id }).lean();
+
+      // Validate document and update stock in transaction
+      const session = await mongoose.startSession();
+      session.startTransaction();
+
+      try {
+        // Update stock quantities based on document type
+        for (const move of stockMoves) {
+          if (document.docType === 'RECEIPT') {
+            // Increase stock at to_location
+            await documentsController.updateStockQuant(session, move.productId, move.toLocationId, move.quantity, 'INCREASE');
+          } else if (document.docType === 'DELIVERY') {
+            // Decrease stock at from_location
+            await documentsController.updateStockQuant(session, move.productId, move.fromLocationId, move.quantity, 'DECREASE');
+          } else if (document.docType === 'INTERNAL_TRANSFER') {
+            // Decrease from source, increase at destination
+            await documentsController.updateStockQuant(session, move.productId, move.fromLocationId, move.quantity, 'DECREASE');
+            await documentsController.updateStockQuant(session, move.productId, move.toLocationId, move.quantity, 'INCREASE');
+          } else if (document.docType === 'ADJUSTMENT') {
+            // For adjustment, we need to calculate the difference
+            const currentQuant = await StockQuant.findOne({
+              productId: move.productId,
+              locationId: move.toLocationId
+            }).session(session).lean();
+
+            const currentQty = currentQuant ? currentQuant.quantity : 0;
+            const difference = move.quantity - currentQty;
+
+            if (difference > 0) {
+              await documentsController.updateStockQuant(session, move.productId, move.toLocationId, difference, 'INCREASE');
+            } else if (difference < 0) {
+              await documentsController.updateStockQuant(session, move.productId, move.toLocationId, Math.abs(difference), 'DECREASE');
+            }
+          }
+        }
+
+        // Update document status
+        await Document.findByIdAndUpdate(
+          id,
+          {
+            $set: {
+              status: 'DONE',
+              validatedById: req.user.id,
+              validatedAt: new Date()
+            }
+          },
+          { session, new: true }
+        );
+
+        await session.commitTransaction();
+        session.endSession();
+      } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
+        throw error;
+      }
+
+      // Fetch updated document
+      const updatedDocument = await Document.findById(id)
+        .populate({
+          path: 'fromLocationId',
+          populate: {
+            path: 'warehouseId',
+            select: 'id name code'
+          }
+        })
+        .populate({
+          path: 'toLocationId',
+          populate: {
+            path: 'warehouseId',
+            select: 'id name code'
+          }
+        })
+        .populate('createdById', 'id name email')
+        .populate('validatedById', 'id name email')
+        .populate({
+          path: 'stockMoves',
+          populate: {
+            path: 'productId',
+            select: 'id name sku'
+          }
+        })
+        .lean();
+
+      const updatedMoves = await StockMove.find({ documentId: id })
+        .populate('productId', 'id name sku')
+        .lean();
+
+      const docResponse = {
+        ...updatedDocument,
+        id: updatedDocument._id,
+        stockMoves: updatedMoves.map(move => ({
+          id: move._id,
+          documentId: move.documentId,
+          productId: move.productId?._id || move.productId,
+          product: move.productId ? {
+            id: move.productId._id || move.productId.id,
+            name: move.productId.name,
+            sku: move.productId.sku
+          } : null,
+          fromLocationId: move.fromLocationId,
+          toLocationId: move.toLocationId,
+          quantity: move.quantity
+        }))
+      };
+
+      res.json({
+        success: true,
+        message: 'Document validated successfully',
+        data: { document: docResponse }
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async cancelDocumentLogic(req, res, next, documentId) {
+    try {
+      const id = documentId;
+
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid document ID'
+        });
+      }
+
+      const document = await Document.findById(id).lean();
+
+      if (!document) {
+        return res.status(404).json({
+          success: false,
+          message: 'Document not found'
+        });
+      }
+
+      if (document.status === 'DONE') {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot cancel a validated document'
+        });
+      }
+
+      if (document.status === 'CANCELED') {
+        return res.status(400).json({
+          success: false,
+          message: 'Document is already canceled'
+        });
+      }
+
+      const updatedDocument = await Document.findByIdAndUpdate(
+        id,
+        { $set: { status: 'CANCELED' } },
+        { new: true }
+      )
+        .populate({
+          path: 'fromLocationId',
+          populate: {
+            path: 'warehouseId',
+            select: 'id name code'
+          }
+        })
+        .populate({
+          path: 'toLocationId',
+          populate: {
+            path: 'warehouseId',
+            select: 'id name code'
+          }
+        })
+        .populate('createdById', 'id name email')
+        .lean();
+
+      const stockMoves = await StockMove.find({ documentId: id })
+        .populate('productId', 'id name sku')
+        .lean();
+
+      const docResponse = {
+        ...updatedDocument.toObject(),
+        id: updatedDocument._id,
+        stockMoves: stockMoves.map(move => ({
+          id: move._id,
+          documentId: move.documentId,
+          productId: move.productId?._id || move.productId,
+          product: move.productId ? {
+            id: move.productId._id || move.productId.id,
+            name: move.productId.name,
+            sku: move.productId.sku
+          } : null,
+          fromLocationId: move.fromLocationId,
+          toLocationId: move.toLocationId,
+          quantity: move.quantity
+        }))
+      };
+
+      res.json({
+        success: true,
+        message: 'Document canceled successfully',
+        data: { document: docResponse }
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
 };

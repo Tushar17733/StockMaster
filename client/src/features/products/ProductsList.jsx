@@ -55,9 +55,9 @@ export const ProductsList = () => {
   if (loading && !data) return <Loader size="lg" />;
   if (error) return <Alert type="error" message={error} />;
 
-  // API now returns { data: [...], total, page, limit }
-  const products = data?.data || [];
-  const totalPages = Math.ceil((data?.total || 0) / itemsPerPage);
+  // API now returns { data: { products: [...], pagination: {...} } }
+  const products = data?.data?.products || data?.data || [];
+  const totalPages = Math.ceil((data?.data?.pagination?.total || data?.total || 0) / itemsPerPage);
 
   const categoryOptions = [
     { value: '', label: 'All Categories' },
@@ -133,7 +133,7 @@ export const ProductsList = () => {
                   <TableCell>{product.sku || '-'}</TableCell>
                   <TableCell>{product.category?.name || '-'}</TableCell>
                   <TableCell>{formatCurrency(product.price || 0)}</TableCell>
-                  <TableCell>{product.totalQuantity || product.stock || 0}</TableCell>
+                  <TableCell>{product.total_quantity || product.totalQuantity || product.stock || 0}</TableCell>
                   <TableCell>{formatDate(product.createdAt)}</TableCell>
                   {isInventoryManager() && (
                     <TableCell>
@@ -164,7 +164,7 @@ export const ProductsList = () => {
             currentPage={page}
             totalPages={totalPages}
             onPageChange={setPage}
-            totalItems={data?.total || 0}
+            totalItems={data?.data?.pagination?.total || data?.total || 0}
             itemsPerPage={itemsPerPage}
           />
         )}

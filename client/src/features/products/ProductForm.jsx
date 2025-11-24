@@ -34,7 +34,14 @@ export const ProductForm = () => {
 
   useEffect(() => {
     if (productData && isEdit) {
-      reset(productData);
+      reset({
+        name: productData.name,
+        sku: productData.sku,
+        categoryId: productData.categoryId,
+        price: productData.price || 0,
+        unit: productData.unitOfMeasure || '',
+        description: productData.description || ''
+      });
     }
   }, [productData, isEdit, reset]);
 
@@ -100,21 +107,13 @@ export const ProductForm = () => {
               rules={{ required: 'Category is required' }}
             />
             <Input
-              label="Price"
+              label="Price (₹)"
               name="price"
               type="number"
               step="0.01"
               register={register}
               error={errors.price}
               rules={{ required: 'Price is required', min: { value: 0, message: 'Price must be positive' } }}
-            />
-            <Input
-              label="Stock Quantity"
-              name="stock"
-              type="number"
-              register={register}
-              error={errors.stock}
-              rules={{ min: { value: 0, message: 'Stock must be positive' } }}
             />
             <Input
               label="Unit"

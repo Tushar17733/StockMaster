@@ -8,6 +8,7 @@ import { Button } from '../../components/UI/Button';
 import { Loader } from '../../components/UI/Loader';
 import { Alert } from '../../components/UI/Alert';
 import { ConfirmModal } from '../../components/UI/ConfirmModal';
+import { Select } from '../../components/UI/Select';
 import { Table, TableHeader, TableHeaderCell, TableBody, TableRow, TableCell } from '../../components/UI/Table';
 import { formatDate, formatCurrency } from '../../utils/helpers';
 
@@ -15,7 +16,7 @@ export const DocumentDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { isInventoryManager } = useAuth();
-  const [actionModal, setActionModal] = useState({ isOpen: false, action: null });
+  const [actionModal, setActionModal] = useState({ isOpen: false, action: null, newStatus: null });
 
   const { data: document, loading, error, execute } = useApi(
     () => documentsAPI.getById(id),
@@ -23,12 +24,24 @@ export const DocumentDetail = () => {
     [id]
   );
 
+  const handleStatusChange = async (newStatus) => {
+    try {
+      await documentsAPI.updateStatus(id, newStatus);
+      // Refresh document data
+      execute();
+    } catch (err) {
+      // Handle error - show message
+      const errorMessage = getUserFriendlyError(err);
+      alert(errorMessage); // Could be replaced with toast notification
+    }
+  };
+
   const handleAction = async (action) => {
     try {
       if (action === 'validate') {
-        await documentsAPI.validate(id);
+        await documentsAPI.updateStatus(id, 'DONE');
       } else if (action === 'cancel') {
-        await documentsAPI.cancel(id);
+        await documentsAPI.updateStatus(id, 'CANCELED');
       }
       setActionModal({ isOpen: false, action: null });
       // Refresh document data
@@ -65,18 +78,26 @@ export const DocumentDetail = () => {
           <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">Document Details</p>
         </div>
         <div className="flex space-x-3">
-          {canValidate && (
-            <Button onClick={() => setActionModal({ isOpen: true, action: 'validate' })}>
-              Validate
-            </Button>
-          )}
-          {canCancel && (
-            <Button
-              variant="danger"
-              onClick={() => setActionModal({ isOpen: true, action: 'cancel' })}
-            >
-              Cancel
-            </Button>
+          {isInventoryManager() && (
+            <Select
+              value={document.status || 'DRAFT'}
+              onChange={(e) => {
+                const newStatus = e.target.value;
+                if (newStatus === 'DONE' || newStatus === 'CANCELED') {
+                  setActionModal({ isOpen: true, action: newStatus === 'DONE' ? 'validate' : 'cancel', newStatus });
+                } else {
+                  handleStatusChange(newStatus);
+                }
+              }}
+              options={[
+                { value: 'DRAFT', label: 'Draft' },
+                { value: 'WAITING', label: 'Waiting' },
+                { value: 'READY', label: 'Ready' },
+                { value: 'DONE', label: 'Done (Validate)' },
+                { value: 'CANCELED', label: 'Canceled' }
+              ]}
+              className="w-40"
+            />
           )}
         </div>
       </div>
@@ -163,12 +184,21 @@ export const DocumentDetail = () => {
       <ConfirmModal
         isOpen={actionModal.isOpen}
         onClose={() => setActionModal({ isOpen: false, action: null })}
-        onConfirm={() => handleAction(actionModal.action)}
-        title={actionModal.action === 'validate' ? 'Validate Document' : 'Cancel Document'}
+        onConfirm={() => {
+          if (actionModal.action === 'validate' || actionModal.action === 'cancel') {
+            handleAction(actionModal.action);
+          } else {
+            handleStatusChange(actionModal.newStatus);
+            setActionModal({ isOpen: false, action: null });
+          }
+        }}
+        title={actionModal.action === 'validate' ? 'Validate Document' : actionModal.action === 'cancel' ? 'Cancel Document' : 'Change Document Status'}
         message={
           actionModal.action === 'validate'
-            ? 'Are you sure you want to validate this document?'
-            : 'Are you sure you want to cancel this document? This action cannot be undone.'
+            ? 'Are you sure you want to validate this document? This will update stock quantities.'
+            : actionModal.action === 'cancel'
+            ? 'Are you sure you want to cancel this document? This action cannot be undone.'
+            : `Are you sure you want to change the document status to ${actionModal.newStatus}?`
         }
         variant={actionModal.action === 'cancel' ? 'danger' : 'primary'}
       />

@@ -69,15 +69,15 @@ export const ProductDetail = () => {
           </div>
           <div>
             <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Price</label>
-            <p className="mt-1 text-gray-900 dark:text-gray-100">{formatCurrency(product.price)}</p>
+            <p className="mt-1 text-gray-900 dark:text-gray-100">{formatCurrency(product.price || 0)}</p>
           </div>
           <div>
             <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Stock</label>
-            <p className="mt-1 text-gray-900 dark:text-gray-100">{product.stock || 0}</p>
+            <p className="mt-1 text-gray-900 dark:text-gray-100">{product.totalQuantity || product.total_quantity || product.stock || 0}</p>
           </div>
           <div>
             <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Unit</label>
-            <p className="mt-1 text-gray-900 dark:text-gray-100">{product.unit || '-'}</p>
+            <p className="mt-1 text-gray-900 dark:text-gray-100">{product.unitOfMeasure || product.unit || '-'}</p>
           </div>
           <div>
             <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Created At</label>

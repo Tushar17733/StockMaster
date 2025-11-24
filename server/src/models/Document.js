@@ -53,7 +53,16 @@ const documentSchema = new mongoose.Schema({
     default: null
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
+});
+
+// Virtual for stock moves
+documentSchema.virtual('stockMoves', {
+  ref: 'StockMove',
+  localField: '_id',
+  foreignField: 'documentId'
 });
 
 // Indexes for faster queries (docNumber already has unique index from unique: true)

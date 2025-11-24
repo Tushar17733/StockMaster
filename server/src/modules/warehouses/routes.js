@@ -27,6 +27,12 @@ const updateWarehouseSchema = z.object({
   })
 });
 
+const deleteWarehouseSchema = z.object({
+  params: z.object({
+    id: z.string()
+  })
+});
+
 // GET /warehouses
 router.get('/', authenticate, async (req, res, next) => {
   try {
@@ -221,6 +227,58 @@ router.patch('/:id', validate(updateWarehouseSchema), authenticate, authorize('I
           updatedAt: updatedWarehouse.updatedAt
         }
       }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// DELETE /warehouses/:id
+router.delete('/:id', validate(deleteWarehouseSchema), authenticate, authorize('INVENTORY_MANAGER'), async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid warehouse ID'
+      });
+    }
+
+    const warehouse = await Warehouse.findById(id);
+
+    if (!warehouse) {
+      return res.status(404).json({
+        success: false,
+        message: 'Warehouse not found'
+      });
+    }
+
+    // Check if warehouse has locations
+    const locationCount = await Location.countDocuments({ warehouseId: id });
+
+    if (locationCount > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot delete warehouse with ${locationCount} location(s). Please delete the locations first.`
+      });
+    }
+
+    // Check if any users have this as default warehouse
+    const userCount = await User.countDocuments({ defaultWarehouseId: id });
+
+    if (userCount > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot delete warehouse. ${userCount} user(s) have this as their default warehouse.`
+      });
+    }
+
+    await Warehouse.findByIdAndDelete(id);
+
+    res.json({
+      success: true,
+      message: 'Warehouse deleted successfully'
     });
   } catch (error) {
     next(error);

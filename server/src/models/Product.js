@@ -16,11 +16,22 @@ const productSchema = new mongoose.Schema({
   categoryId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Category',
-    required: true
+    required: false
   },
   unitOfMeasure: {
     type: String,
-    required: true,
+    required: false,
+    default: 'pcs',
+    trim: true
+  },
+  price: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  description: {
+    type: String,
+    default: '',
     trim: true
   },
   isActive: {
