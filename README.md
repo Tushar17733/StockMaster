@@ -20,8 +20,6 @@ A full-stack Inventory Management System (IMS) built with Node.js, Express, Mong
 - **Runtime**: Node.js (LTS)
 - **Framework**: Express.js
 - **Database**: MongoDB
-- **ODM**: Mongoose
-- **Validation**: Zod
 - **Authentication**: JWT + bcrypt
 
 ### Frontend
@@ -35,8 +33,8 @@ A full-stack Inventory Management System (IMS) built with Node.js, Express, Mong
 ## Prerequisites
 
 - Node.js (v18 or higher)
-- MongoDB (MongoDB Atlas URI or local MongoDB instance)
-- npm or yarn package manager
+- MongoDB (MongoDB Atlas URI)
+- npm
 
 ## Installation
 
@@ -67,7 +65,7 @@ Create a `.env` file in the `server/` directory:
 PORT=3000
 NODE_ENV=development
 MONGO_URI=your_mongodb_connection_string_here
-JWT_SECRET=your-secret-key-change-in-production-min-32-characters
+JWT_SECRET=your-secret-key
 JWT_EXPIRES_IN=7d
 OTP_EXPIRY_MINUTES=10
 ```
